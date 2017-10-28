@@ -15,7 +15,7 @@ namespace GetHashParallel
             Stopwatch clock = Stopwatch.StartNew();
             GetStringHash("/home/nikita/RiderProjects");
             clock.Stop();
-            Console.WriteLine("Time Elapsed: {0}",clock.Elapsed);
+            Console.WriteLine("Time Elapsed: {0}", clock.Elapsed);
         }
 
         private static string GetStringHash(string path)
@@ -26,21 +26,24 @@ namespace GetHashParallel
         private static string GetHashFromFile(string path)
         {
             StringBuilder result = new StringBuilder();
-            MD5 md5 = MD5.Create();
-            byte[] byteHash = md5.ComputeHash(Encoding.UTF8.GetBytes(path));
-            foreach (byte t in byteHash)
+            using (MD5 md5 = MD5.Create())
             {
-                result.Append(t.ToString("X2"));
-            } 
-            using (var stream = new BufferedStream(File.OpenRead(path), 1200000))
-            {
-                byte[] data = md5.ComputeHash(stream);
-                foreach (byte t in data)
+                byte[] byteHash = md5.ComputeHash(Encoding.UTF8.GetBytes(path));
+                foreach (byte t in byteHash)
                 {
                     result.Append(t.ToString("X2"));
                 }
-                return result.ToString();
+                using (var stream = new BufferedStream(File.OpenRead(path), 1200000))
+                {
+                    byte[] data = md5.ComputeHash(stream);
+                    foreach (byte t in data)
+                    {
+                        result.Append(t.ToString("X2"));
+                    }
+                }
             }
+            return result.ToString();
+            
         }
 
         private static string GetHash(string path)
@@ -55,7 +58,7 @@ namespace GetHashParallel
             for (int i = 0; i < amountFiles; i++)
             {
                 var i1 = i;
-                fileTasks[i] = Task.Run((() =>GetHashFromFile(files[i1]) )); //files
+                fileTasks[i] = Task.Run((() => GetHashFromFile(files[i1]))); //files
             }
             for (int i = 0; i < recursiveCalls; i++)
             {
@@ -63,14 +66,16 @@ namespace GetHashParallel
                 dirTasks[i] = Task.Run((() => GetHash(subDirs[i1]))); // dirs
             }
 
-            byte[] byteHash = MD5.Create().ComputeHash(Encoding.UTF8.GetBytes(path));
-            StringBuilder pathBuilder = new StringBuilder();
-            foreach (byte t in byteHash)
+            using (MD5 md5 = MD5.Create())
             {
-                pathBuilder.Append(t.ToString("X2"));
+                byte[] byteHash = md5.ComputeHash(Encoding.UTF8.GetBytes(path));
+                StringBuilder pathBuilder = new StringBuilder();
+                foreach (byte t in byteHash)
+                {
+                    pathBuilder.Append(t.ToString("X2"));
+                }
+                result.Append(pathBuilder.ToString());
             }
-            result.Append(pathBuilder.ToString());
-            
             Task.WaitAll(fileTasks);
 
             for (int i = 0; i < amountFiles; i++)
