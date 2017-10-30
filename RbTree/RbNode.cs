@@ -2,32 +2,32 @@
 
 namespace RbTreeParallel
 {
-    public class RbNode<K, V> : INode<K, V> where K : IComparable<K>
+    public class RbNode<TK, TV> : INode<TK, TV> where TK : IComparable<TK>
     {
-        public RbNode<K, V> Left { get; set; } = null;
-        public RbNode<K, V> Parent { get; set; } = null;
-        public RbNode<K, V> Right { get; set; } = null;
-        public Color color;
-        public K key;
-        public V value;
+        public RbNode<TK, TV> Left { get; set; } = null;
+        public RbNode<TK, TV> Parent { get; set; } = null;
+        public RbNode<TK, TV> Right { get; set; } = null;
+        public Color Color;
+        public TK Key;
+        public TV Value;
 
-        public RbNode(K key, V value,Color color = Color.Black)
+        public RbNode(TK key, TV value,Color color = Color.Black)
         {
-            this.key = key;
-            this.value = value;
-            this.color = color;
+            Key = key;
+            Value = value;
+            Color = color;
         }
 
         public override bool Equals(object obj)
         {
-            RbNode<K, V> other = obj as RbNode<K, V>;
+            RbNode<TK, TV> other = obj as RbNode<TK, TV>;
             if (other == null)
             {
                 return false;
             }
-            return this.key.Equals(other.key) &&
-                   this.color.Equals(other.color) &&
-                   this.value.Equals(other.value);
+            return Key.Equals(other.Key) &&
+                   Color.Equals(other.Color) &&
+                   Value.Equals(other.Value);
         }
     }
 }

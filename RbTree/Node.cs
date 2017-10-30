@@ -1,6 +1,6 @@
 ﻿namespace RbTreeParallel
 {
-    public interface INode <K,V> where K: System.IComparable<K>
+    public interface INode <TK,TV> where TK: System.IComparable<TK>
     {
         
     }

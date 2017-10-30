@@ -1,38 +1,36 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel.Design;
-using System.Data;
-using System.Data.Odbc;
-using System.Diagnostics;
-using System.Runtime.Remoting.Messaging;
-using System.Security.Cryptography.X509Certificates;
 
 namespace RbTreeParallel
 {
-    public class RbTree<K, V> : ITree<K, V>, IEnumerable<RbNode<K, V>> where K : IComparable<K>
+    public class RbTree<TK, TV> : ITree<TK, TV> where TK : IComparable<TK>
     {
-        public RbNode<K, V> Root;
+        private RbNode<TK, TV> _root;
 
-        public RbTree(RbNode<K, V> root = null)
+        public RbNode<TK,TV> GetRoot()
         {
-            this.Root = root;
+            return _root;
+        }
+
+        public RbTree(RbNode<TK, TV> root = null)
+        {
+            _root = root;
         }
         
-        //ok
-        public bool Insert(K key, V value)
+       
+        public bool Insert(TK key, TV value)
         {
-            var tmp = Root;
+            var tmp = _root;
             if (tmp == null)
             {
-                Root = new RbNode<K, V>(key, value);
+                _root = new RbNode<TK, TV>(key, value);
                 return true;
             }
             var pos = 'r';
             while (tmp != null)
             {
-                if (tmp.key.Equals(key)) return false;
-                if (key.CompareTo(tmp.key) == 1)
+                if (tmp.Key.Equals(key)) return false;
+                if (key.CompareTo(tmp.Key) == 1)
                 {
                     if (tmp.Right == null)
                     {
@@ -51,7 +49,7 @@ namespace RbTreeParallel
                     tmp = tmp.Left;
                 }
             }
-            var newRbNode = new RbNode<K, V>(key, value, Color.Red) {Parent = tmp};
+            var newRbNode = new RbNode<TK, TV>(key, value, Color.Red) {Parent = tmp};
             if (pos == 'l')
             {
                 tmp.Left = newRbNode;
@@ -63,16 +61,16 @@ namespace RbTreeParallel
             FixUpInsertRbNode(newRbNode);
             return true;
         }
-        //ok
-        public V Search(K key)
+       
+        public TV Search(TK key)
         {
-            var tmp = this.Root;
+            var tmp = _root;
             while (tmp != null)
             {
-                switch (key.CompareTo(tmp.key))
+                switch (key.CompareTo(tmp.Key))
                 {
                     case 0:
-                        return tmp.value;
+                        return tmp.Value;
                     case 1:
                         tmp = tmp.Right;
                         break;
@@ -82,49 +80,49 @@ namespace RbTreeParallel
                 }
             }
 
-            return default(V); //not default;
+            return default(TV); //not default;
         }
 
         
-        public IEnumerator<RbNode<K, V>> GetEnumerator()
+        public IEnumerator<RbNode<TK, TV>> GetEnumerator()
         {
-            throw new NotImplementedException();
+            foreach (var node in Inorder(_root))
+            {
+                yield return node;
+            }
         }
 
-        IEnumerator IEnumerable.GetEnumerator()
+        public IEnumerable<RbNode<TK, TV>> Inorder(RbNode<TK,TV>root)
         {
-            yield return 5;
-        }
-
-        public IEnumerable<RbNode<K, V>> Inorder(RbNode<K,V>root)
-        {
+            if (root.Left != null)
             foreach (var left  in Inorder(root.Left))
             {
                 yield return left;
             }
             yield return root;
+            
+            if (root.Right != null)
             foreach (var right in Inorder(root.Right))
             {
                 yield return right;
             }
         }
 
-        private void FixUpInsertRbNode(RbNode<K, V> x)
+        private void FixUpInsertRbNode(RbNode<TK, TV> argNode)
         {
-            var node = x;
-            //var rbNode = modifiedNode;
-            RbNode<K, V> tmp;
-            while ( node.Parent != null && node.Parent.color == Color.Red)
+            var node = argNode;
+            while ( node.Parent != null && node.Parent.Color == Color.Red)
             {
+                RbNode<TK, TV> tmp;
                 if (node.Parent.Equals(node.Parent?.Parent?.Left))
                 {
                     tmp = node.Parent?.Parent?.Right;
-                    if (tmp != null && tmp.color == Color.Red)
+                    if (tmp != null && tmp.Color == Color.Red)
                     {
-                        node.Parent.color = Color.Black; //????
-                        tmp.color = Color.Black;
-                        node.Parent.Parent.color = Color.Red; //????
-                        node = node.Parent.Parent; //???
+                        node.Parent.Color = Color.Black; 
+                        tmp.Color = Color.Black;
+                        node.Parent.Parent.Color = Color.Red;
+                        node = node.Parent.Parent;
                     }
                     else
                     {
@@ -133,19 +131,19 @@ namespace RbTreeParallel
                             node = node.Parent;
                             LeftRotate(node);
                         }
-                        node.Parent.color = Color.Black;
-                        node.Parent.Parent.color = Color.Red;
+                        node.Parent.Color = Color.Black;
+                        node.Parent.Parent.Color = Color.Red;
                         RightRotate(node.Parent.Parent);
                     }
                 }
                 else
                 {
                     tmp = node.Parent?.Parent?.Left;
-                    if (tmp != null && tmp.color == Color.Red)
+                    if (tmp != null && tmp.Color == Color.Red)
                     {
-                        node.Parent.color = Color.Black;
-                        tmp.color = Color.Black;
-                        node.Parent.Parent.color = Color.Red;
+                        node.Parent.Color = Color.Black;
+                        tmp.Color = Color.Black;
+                        node.Parent.Parent.Color = Color.Red;
                         node = node.Parent.Parent;
                     }
                     else
@@ -155,17 +153,18 @@ namespace RbTreeParallel
                             node = node.Parent;
                             RightRotate(node);
                         }
-                        node.Parent.color = Color.Black;
-                        node.Parent.Parent.color = Color.Red;
+                        node.Parent.Color = Color.Black;
+                        node.Parent.Parent.Color = Color.Red;
                         LeftRotate(node.Parent.Parent);
                     }
                 }
             }
-            Root.color = Color.Black;
+            _root.Color = Color.Black;
         }
 
-        private void LeftRotate(RbNode<K, V> node)
+        private void LeftRotate(RbNode<TK, TV> argNode)
         {
+            var node = argNode;
             if (node.Right == null)
             {
                 Console.Write("Error in Left Rotate");
@@ -180,7 +179,7 @@ namespace RbTreeParallel
 
             if (node.Parent == null)
             {
-                this.Root = copyNode;
+                _root = copyNode;
             }
             else
             {
@@ -197,16 +196,17 @@ namespace RbTreeParallel
             node.Parent = copyNode;
         }
 
-        private void RightRotate(RbNode<K, V> node)
+        private void RightRotate(RbNode<TK, TV> argNode)
         {
-            if (node.Left == null) ; //throw UnsupportedOperationException("Bad in fun left rotate left child ==null!")
+            var node = argNode;
+            //if (node.Left == null) ; //throw UnsupportedOperationException("Bad in fun left rotate left child ==null!")
             var copyNode = node.Left;
             node.Left = copyNode?.Right;
 
             if (copyNode.Right != null) copyNode.Right.Parent = node;
             copyNode.Parent = node.Parent;
 
-            if (node.Parent == null) this.Root = copyNode;
+            if (node.Parent == null) _root = copyNode;
             else
             {
                 if (node.Equals(node.Parent?.Left))
@@ -222,41 +222,40 @@ namespace RbTreeParallel
             node.Parent = copyNode;
         }
 
-        private void RbRemoveFixUp(RbNode<K, V> x)
+        private void RbRemoveFixUp(RbNode<TK, TV> argNode)
         {
-            var node = x;
-            while (!ReferenceEquals(Root, node) && IsBlack(node))
+            var node = argNode;
+            while (!ReferenceEquals(_root, node) && IsBlack(node))
             {
-                RbNode<K, V> tmp;
+                RbNode<TK, TV> tmp;
                 if (ReferenceEquals(node, node.Parent?.Left))
                 {
                     tmp = node.Parent.Right;
                     if (!IsBlack(tmp))
                     {
-                        tmp.color = Color.Black;
-                        node.Parent.color = Color.Red;
+                        tmp.Color = Color.Black;
+                        node.Parent.Color = Color.Red;
                         LeftRotate(node.Parent);
                         tmp = node.Parent.Right;
                     }
                     if (IsBlack(tmp.Left) && IsBlack(tmp.Right))
                     {
-                        tmp.color = Color.Red;
+                        tmp.Color = Color.Red;
                         node = node.Parent;
                     }
                     else if (IsBlack(tmp.Right))
                     {
-                        tmp.Left.color = Color.Black;
-                        tmp.color = Color.Red;
+                        tmp.Left.Color = Color.Black;
+                        tmp.Color = Color.Red;
                         RightRotate(tmp);
-                        tmp = node.Parent.Right;
                     }
                     else
                     {
-                        tmp.color = node.Parent.color;
-                        node.Parent.color = Color.Black;
-                        tmp.Right.color = Color.Black;
+                        tmp.Color = node.Parent.Color;
+                        node.Parent.Color = Color.Black;
+                        tmp.Right.Color = Color.Black;
                         LeftRotate(node.Parent);
-                        node = Root;
+                        node = _root;
                     }
                 }
                 else
@@ -264,44 +263,44 @@ namespace RbTreeParallel
                     tmp = node.Parent.Left;
                     if (!IsBlack(tmp))
                     {
-                        tmp.color = Color.Black;
-                        node.Parent.color = Color.Red;
+                        tmp.Color = Color.Black;
+                        node.Parent.Color = Color.Red;
                         RightRotate(node.Parent);
                         tmp = node.Parent.Left;
                     }
                     if (IsBlack(tmp.Right) && IsBlack(tmp.Left))
                     {
-                        tmp.color = Color.Red;
+                        tmp.Color = Color.Red;
                         node = node.Parent;
                     }
                     else if (IsBlack(tmp.Left))
                     {
-                        tmp.Right.color = Color.Black;
-                        tmp.color = Color.Red;
+                        tmp.Right.Color = Color.Black;
+                        tmp.Color = Color.Red;
                         LeftRotate(tmp);
-                        tmp = node.Parent.Left;
                     }
                     else
                     {
-                        tmp.color = node.Parent.color;
-                        node.Parent.color = Color.Black;
-                        tmp.Left.color = Color.Black;
+                        tmp.Color = node.Parent.Color;
+                        node.Parent.Color = Color.Black;
+                        tmp.Left.Color = Color.Black;
                         RightRotate(node.Parent);
-                        node = Root;
+                        node = _root;
                     }
                 }
             }
-            if (!IsBlack(node)) node.color = Color.Black;
+            if (!IsBlack(node)) node.Color = Color.Black;
         }
 
-        private bool IsBlack(RbNode<K, V> node)
+        private bool IsBlack(RbNode<TK, TV> argNode)
         {
+            var node = argNode;
             if (node == null) return true;
-            if (node.color == Color.Black) return true;
+            if (node.Color == Color.Black) return true;
             return false;
         }
 
-        private RbNode<K, V> GetNodeByMinKey(RbNode<K, V> node)
+        private RbNode<TK, TV> GetNodeByMinKey(RbNode<TK, TV> node)
         {
             var tmp = node;
             while (tmp.Left != null) tmp = tmp.Left;
@@ -309,22 +308,22 @@ namespace RbTreeParallel
         }
 
 
-        public bool Delete(K key)
+        public bool Delete(TK key)
         {
-            var removedNode = Root;
+            var removedNode = _root;
             while (removedNode != null)
             {
-                if (key.Equals(removedNode.key))
+                if (key.Equals(removedNode.Key))
                 {
                     break;
                 }
-                removedNode = key.CompareTo(removedNode.key) == -1 ? removedNode.Left : removedNode.Right;
+                removedNode = key.CompareTo(removedNode.Key) == -1 ? removedNode.Left : removedNode.Right;
             }
             if (removedNode == null) return false;
 
-            if (removedNode.Equals(Root) && removedNode.Left == null && removedNode.Right == null)
+            if (removedNode.Equals(_root) && removedNode.Left == null && removedNode.Right == null)
             {
-                Root = null;
+                _root = null;
                 return true;
             }
 
@@ -333,35 +332,35 @@ namespace RbTreeParallel
         }
 
 
-        private void RemoveNode(RbNode<K, V> x)
+        private void RemoveNode(RbNode<TK, TV> argNode)
         {
-            var remNode = x;
+            var node = argNode;
+            var remNode = node;
             var right = true; // position of remNode
-            RbNode<K, V> nil;
 
-            if (x.Left != null && x.Right != null)
+            if (node.Left != null && node.Right != null)
             {
-                remNode = GetNodeByMinKey(x.Right);
-                x.key = remNode.key;
-                x.value = remNode.value;
+                remNode = GetNodeByMinKey(node.Right);
+                node.Key = remNode.Key;
+                node.Value = remNode.Value;
                 if (remNode.Right != null) remNode.Right.Parent = remNode.Parent;
             }
             else
             {
-                if (x.Left != null)
+                if (node.Left != null)
                 {
                     right = false;
-                    remNode.Left.Parent = x.Parent;
+                    remNode.Left.Parent = node.Parent;
                 }
-                else if (x.Right != null)
+                else if (node.Right != null)
                 {
-                    remNode.Right.Parent = x.Parent;
+                    remNode.Right.Parent = node.Parent;
                 }
             }
 
             if (remNode.Parent == null)
             {
-                Root = right ? remNode.Right : remNode.Left;
+                _root = right ? remNode.Right : remNode.Left;
             }
             else
             {
@@ -387,8 +386,7 @@ namespace RbTreeParallel
                 }
                 else
                 {
-                    nil = new RbNode<K, V>(remNode.key, remNode.value);
-                    nil.Parent = remNode.Parent;
+                    var nil = new RbNode<TK, TV>(remNode.Key, remNode.Value) {Parent = remNode.Parent};
                     if (remNode.Parent.Left == null)
                     {
                         remNode.Parent.Left = nil;
@@ -408,6 +406,25 @@ namespace RbTreeParallel
                     }
                 }
             }
+        }
+        
+        public void PrintTree(RbNode<TK, TV> node, int level = 0) {
+            
+            if (node != null)
+            {
+                PrintTree(node.Right, level + 1);
+                for (int i = 1;i <= level;i++) Console.Write("  |");
+                if (node.Color == Color.Red)
+                {
+                    Console.ForegroundColor = ConsoleColor.DarkRed;
+                    Console.WriteLine(node.Value);
+                }
+                else {
+                    Console.WriteLine(node.Value);
+                }
+                PrintTree(node.Left, level + 1);
+            }
+            Console.ForegroundColor = ConsoleColor.Black;
         }
     }
 }

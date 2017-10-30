@@ -2,10 +2,10 @@
 
 namespace RbTreeParallel
 {
-    public interface ITree <in K,V> where K: IComparable<K>
+    public interface ITree <in TK,TV> where TK: IComparable<TK>
     {
-        bool Insert(K key, V value);
-        bool Delete(K key);
-        V Search(K key);//return default but be carefull!
+        bool Insert(TK key, TV value);
+        bool Delete(TK key);
+        TV Search(TK key);//return default but be carefull!
     }
 }
