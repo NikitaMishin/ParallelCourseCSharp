@@ -1,33 +1,38 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Data.Odbc;
 using System.Data.SqlTypes;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 
-
-// 0 - no acition
-// 1 - insert
-// 2 - deletion
 namespace RbTreeParallel
 {
     public class RbTreeParallel<TK, TV> : ITree<TK, TV> where TK : IComparable<TK>
     {
-        private RbTree<TK, TV> _rbTree; //-1 do nothing empty
+        private RbTree<TK, TV> _rbTree;
+        private static volatile int _lockUpdateFlag = 0;
+        private volatile object _insertDeletionLock = new object();
 
-        private volatile Dictionary<TK, Tuple<TV, int, int>> _hashMap = new Dictionary<TK, Tuple<TV, int, int>>(100000);
-        //TK:{TV,index,-1/0/1-del or ins}//also set capacity
+        private volatile Dictionary<TK, Tuple<TV, int, Operation>> _hashMap =
+            new Dictionary<TK, Tuple<TV, int, Operation>>(100000);
 
-        private volatile Counter _updated = new Counter(); //if 0 then must be update
+        //private volatile Counter _updated = new Counter(); 
         private volatile Counter _counter = new Counter();
-        private int _bunchSize;
 
-        public RbTreeParallel(RbNode<TK, TV> root = null, int bunchSize = 100)
+        private volatile Counter _dictSize = new Counter();
+        private readonly int _bunchSize;
+
+        public RbTreeParallel(RbNode<TK, TV> root = null, int bunchSize = 1000)
         {
+            if (bunchSize < 50) bunchSize = 1000;
             _rbTree = new RbTree<TK, TV>();
             _bunchSize = bunchSize;
+            //_updated.Next();
+            _counter.Next();
             if (root == null)
             {
                 return;
@@ -41,26 +46,39 @@ namespace RbTreeParallel
             Set  _counter = 0
             Set _updated = 1
         */
-        private async Task<bool> UpdateAsync()
+        private async void UpdateAsync()
         {
-            _updated.Reset();
-            foreach (var tuple in _hashMap)
+            if (Interlocked.CompareExchange(ref _lockUpdateFlag, 1, 0) != 0) return;
+            // only 1 thread will enter here without locking the object/put the
+            // other threads RETURN 
+            lock (_hashMap) //to avoid problems like _hashMap[notExistingKey] in Search
             {
-                switch (tuple.Value.Item3)
+                //maybe add lock to rbTree???
+                //_updated.Reset();
+                _counter.Reset();
+                foreach (var tuple in _hashMap)
                 {
-                    case 1:
-                        _rbTree.Replace(tuple.Key, tuple.Value.Item1);//insert if no or replace value 
-                        break;
-                    case 2:
-                        _rbTree.Delete(tuple.Key);
-                        break;
-                    default:break;
+                    switch (tuple.Value.Item3)
+                    {
+                        case Operation.NoAction:
+                            _rbTree.Replace(tuple.Key, tuple.Value.Item1); //insert if no or replace value 
+                            break;
+                        case Operation.Insert:
+                            _rbTree.Insert(tuple.Key, tuple.Value.Item1);
+                            break;
+                        case Operation.Delete:
+                            _rbTree.Delete(tuple.Key);
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
                 }
                 _counter.Next();
                 _hashMap.Clear();
-                _updated.Next();
+                _dictSize.Reset();
+                Interlocked.Decrement(ref _lockUpdateFlag);
+                //_updated.Next();
             }
-            return true;
         }
 
         /*descrirption async Task<bool> DeleteAsync:
@@ -69,10 +87,89 @@ namespace RbTreeParallel
             update counters
             Launch Update if needed
         */
-        private async Task<bool> DeleteAsync(TK key)
+        private async Task<bool> DeleteAsync(TK key) //
         {
-            //await SearchAsync(key,_rbTree);
-            throw new NotImplementedException();
+            var searchInTree = SearchAsync(key, _rbTree);
+            await searchInTree;
+            while (true)
+            {
+                //var old = _updated.Current;
+                var flag = 0;
+                //block of searching in tree
+                while (_lockUpdateFlag == 1)
+                    //while (old == 0 || old < _updated.Current) //tree is in update  right know 
+                {
+                    //    old = _updated.Current;
+                    flag = 1;
+                } //guarantee that on that moment in tree no updates -actual info
+
+                var old = _counter.Current;
+                //cover case when tree updated//cas on  _updateFlag
+                if (flag == 1) searchInTree = SearchAsync(key, _rbTree); //remember about this task
+                if (flag == 1) await searchInTree; //filth place
+                lock (_insertDeletionLock)
+                {
+                    try
+                    {
+                        var tuple = _hashMap[key];
+                        if (old >= tuple.Item2) //or cirrent.Current
+                        {
+                            if (searchInTree.Result == null)
+                            {
+                                switch (tuple.Item3)
+                                {
+                                    case Operation.NoAction:
+                                        flag = -1;
+                                        break;
+                                    case Operation.Insert:
+                                        _hashMap[key] = new Tuple<TV, int, Operation>(tuple.Item1, _counter.Current, 0);
+                                        flag = -1;
+                                        break;
+                                    case Operation.Delete:
+                                        //it's error - impssiible so i think try again
+                                        // _hashMap[key] = new Tuple<TV, int, int>(tuple.Item1,_counter.Current,);
+                                        break;
+                                }
+                            }
+                            else
+                            {
+                                switch (tuple.Item3)
+                                {
+                                    case Operation.NoAction:
+                                        _hashMap[key] = new Tuple<TV, int, Operation>(tuple.Item1, _counter.Current,
+                                            Operation.Delete);
+                                        break;
+                                    case Operation.Insert:
+                                        _hashMap[key] = new Tuple<TV, int, Operation>(tuple.Item1, _counter.Current,
+                                            Operation.NoAction);
+                                        break;
+                                    case Operation.Delete:
+                                        _hashMap[key] = new Tuple<TV, int, Operation>(tuple.Item1, _counter.Current,
+                                            Operation.Delete);
+                                        break;
+                                }
+                                flag = -1;
+                            }
+                        }
+                    }
+                    catch (KeyNotFoundException e)
+                    {
+                        if (searchInTree.Result != null)
+                        {
+                            _hashMap[key] = new Tuple<TV, int, Operation>(searchInTree.Result, _counter.Current,
+                                Operation.Delete);
+                            if (_dictSize.Next() >= _bunchSize) UpdateAsync(); //with or without await
+                        }
+                        //or do nothing
+                        flag = -1;
+                    }
+                }
+                if (flag == -1)
+                {
+                    _counter.Next();
+                    return true;
+                }
+            }
         }
 
         /*
@@ -85,10 +182,50 @@ namespace RbTreeParallel
         */
         private async Task<bool> InsertAsync(TK key, TV value)
         {
-            
-            
-            
-            throw new NotImplementedException();
+            var searchInTree = SearchAsync(key, _rbTree);
+            await searchInTree;
+            while (true)
+            {
+                //var node = new Tuple<TV, int, int>(value, _counter.Current, 1);
+                //var old = _updated.Current;
+                var flag = 0;
+                //block of searching in tree
+
+                while (_lockUpdateFlag == 1)
+                    //while (old == 0 || old < _updated.Current) //tree is in update  right know 
+                {
+                    //old = _updated.Current;
+                    flag = 1;
+                } //guarantee that on that moment in tree no updates -actual info
+                var old = _counter.Current;
+                //cover case when tree updated//cas on  _updateFlag
+                if (flag == 1) searchInTree = SearchAsync(key, _rbTree); //remember about this task
+                if (flag == 1) await searchInTree; //filth place
+
+                lock (_insertDeletionLock)
+                {
+                    try
+                    {
+                        var tuple = _hashMap[key];
+                        if (old >= tuple.Item2) //or cirrent.Current
+                        {
+                            _hashMap[key] = new Tuple<TV, int, Operation>(value, _counter.Current, Operation.Insert);
+                            flag = -1; //???????????????//
+                        }
+                    }
+                    catch (KeyNotFoundException e)
+                    {
+                        _hashMap[key] = new Tuple<TV, int, Operation>(value, _counter.Current, Operation.Insert);
+                        if (_dictSize.Next() >= _bunchSize) UpdateAsync(); //with or without await
+                        flag = -1;
+                    }
+                }
+                if (flag == -1)
+                {
+                    _counter.Next();
+                    return true;
+                }
+            }
         }
 
         /* descrirption async SearchAsync:
@@ -97,6 +234,7 @@ namespace RbTreeParallel
         */
         private async Task<TV> SearchAsync(TK key, RbTree<TK, TV> tree)
         {
+            //old = val then optimistic    
             var old = tree[key];
             while (true)
             {
@@ -113,40 +251,42 @@ namespace RbTreeParallel
             }
         }
 
-        private async Task<Tuple<TV, int, int>> SearchAsync(TK key, Dictionary<TK, Tuple<TV, int, int>> dict)
+        private async Task<Tuple<TV, int, Operation>> SearchAsync(TK key,
+            Dictionary<TK, Tuple<TV, int, Operation>> dict)
         {
-            Tuple<TV, int, int> old = null;
-            if (dict.ContainsKey(key)) //to avoid exeception
+            Tuple<TV, int, Operation> old;
+            try
             {
                 old = dict[key];
             }
-
-            if (old == null && !dict.ContainsKey(key)) //nothing changed and null
+            catch (KeyNotFoundException e)
             {
-                return null;
+                old = null;
             }
-
-            old = dict[key];
             while (true)
             {
-                var cur = dict[key];
+                Tuple<TV, int, Operation> cur;
+                try
+                {
+                    cur = dict[key];
+                }
+                catch (KeyNotFoundException e)
+                {
+                    cur = null;
+                }
                 if (old == null && cur == null)
                 {
                     return null;
                 }
                 if (old != null && old.Equals(cur))
                 {
-                    return new Tuple<TV, int, int>(cur.Item1, cur.Item2, cur.Item3);
+                    return new Tuple<TV, int, Operation>(old.Item1, old.Item2, old.Item3);
                 }
                 old = cur;
             }
         }
 
-
-        public bool Delete(TK key)
-        {
-            throw new NotImplementedException();
-        }
+        public bool Delete(TK key) => DeleteAsync(key).Result;
 
         private async Task<TV> SearchAsync(TK key)
         {
@@ -154,13 +294,12 @@ namespace RbTreeParallel
             await searchInTree;
             while (true)
             {
-                var old = _updated.Current;
+                //var old = _updated.Current;
                 var flag = 0;
-
-                //block of searching in tree
-                while (old == 0 || old < _updated.Current) //tree is in update  right know
+                while (_lockUpdateFlag == 1)
+                    //while (old == 0 || old < _updated.Current) //tree is in update  right know
                 {
-                    old = _updated.Current;
+                    //old = _updated.Current;
                     flag = 1;
                 } //guarantee that on that moment in tree no updates -actual info
 
@@ -169,31 +308,30 @@ namespace RbTreeParallel
                     searchInTree = SearchAsync(key, _rbTree);
                     await searchInTree;
                 }
-
                 var searchInDict = await SearchAsync(key, _hashMap);
-
                 var item1 = searchInDict == null ? default(TV) : searchInDict.Item1;
                 var item2 = searchInDict?.Item2; //version
                 var item3 = searchInDict?.Item3; // action
                 var value = searchInTree.Result; //value stored in Tree
 
                 if ((searchInDict != null) && (!(_counter.Current >= item2))) continue;
-
+                // old < _update.Curernt or no need???
                 //safe place
                 switch (item3)
                 {
                     case null:
                         return value; //no in dictionary so return just value from Tree whather it.s null or TV
-                    case 0: //no action
+                    case Operation.NoAction: //no action
                         return value;
-                    case 1:
+                    case Operation.Insert:
                         return item1; //action is isnsert that mean that on server lay old value by key
-                    case 2: //action is deleted
-                        return default(TV);
+                    case Operation.Delete: //action is deleted
+                        return default(TV); //so return null
                 }
             }
         }
+
         public TV Search(TK key) => SearchAsync(key).Result;
-        public bool Insert(TK key, TV value) => InsertAsync(key, value);
+        public bool Insert(TK key, TV value) => InsertAsync(key, value).Result;
     }
 }
