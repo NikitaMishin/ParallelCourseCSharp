@@ -7,7 +7,7 @@ namespace RbTreeParallel
     {
         private RbNode<TK, TV> _root;
 
-        public RbNode<TK,TV> GetRoot()
+        public RbNode<TK, TV> GetRoot()
         {
             return _root;
         }
@@ -16,8 +16,8 @@ namespace RbTreeParallel
         {
             _root = root;
         }
-        
-       
+
+
         public bool Insert(TK key, TV value)
         {
             var tmp = _root;
@@ -61,7 +61,28 @@ namespace RbTreeParallel
             FixUpInsertRbNode(newRbNode);
             return true;
         }
-       
+
+        public bool Replace(TK key, TV value)
+        {
+            var tmp = _root;
+            while (tmp != null)
+            {
+                switch (key.CompareTo(tmp.Key))
+                {
+                    case 1:
+                        tmp = tmp.Right;
+                        break;
+                    case -1:
+                        tmp = tmp.Left;
+                        break;
+                    case 0:
+                        tmp.Value = value;
+                        return true;
+                }
+            }
+            return false;
+        }
+
         public TV Search(TK key)
         {
             var tmp = _root;
@@ -87,7 +108,7 @@ namespace RbTreeParallel
         public TV this[TK key]
         {
             get => Search(key);
-            set => Insert(key,value);
+            set => Insert(key, value);
         }
 
         public IEnumerator<RbNode<TK, TV>> GetEnumerator()
@@ -98,26 +119,26 @@ namespace RbTreeParallel
             }
         }
 
-        public IEnumerable<RbNode<TK, TV>> Inorder(RbNode<TK,TV>root)
+        public IEnumerable<RbNode<TK, TV>> Inorder(RbNode<TK, TV>root)
         {
             if (root.Left != null)
-            foreach (var left  in Inorder(root.Left))
-            {
-                yield return left;
-            }
+                foreach (var left in Inorder(root.Left))
+                {
+                    yield return left;
+                }
             yield return root;
-            
+
             if (root.Right != null)
-            foreach (var right in Inorder(root.Right))
-            {
-                yield return right;
-            }
+                foreach (var right in Inorder(root.Right))
+                {
+                    yield return right;
+                }
         }
 
         private void FixUpInsertRbNode(RbNode<TK, TV> argNode)
         {
             var node = argNode;
-            while ( node.Parent != null && node.Parent.Color == Color.Red)
+            while (node.Parent != null && node.Parent.Color == Color.Red)
             {
                 RbNode<TK, TV> tmp;
                 if (node.Parent.Equals(node.Parent?.Parent?.Left))
@@ -125,7 +146,7 @@ namespace RbTreeParallel
                     tmp = node.Parent?.Parent?.Right;
                     if (tmp != null && tmp.Color == Color.Red)
                     {
-                        node.Parent.Color = Color.Black; 
+                        node.Parent.Color = Color.Black;
                         tmp.Color = Color.Black;
                         node.Parent.Parent.Color = Color.Red;
                         node = node.Parent.Parent;
@@ -413,19 +434,20 @@ namespace RbTreeParallel
                 }
             }
         }
-        
-        public void PrintTree(RbNode<TK, TV> node, int level = 0) {
-            
+
+        public void PrintTree(RbNode<TK, TV> node, int level = 0)
+        {
             if (node != null)
             {
                 PrintTree(node.Right, level + 1);
-                for (int i = 1;i <= level;i++) Console.Write("  |");
+                for (int i = 1; i <= level; i++) Console.Write("  |");
                 if (node.Color == Color.Red)
                 {
                     Console.ForegroundColor = ConsoleColor.DarkRed;
                     Console.WriteLine(node.Value);
                 }
-                else {
+                else
+                {
                     Console.WriteLine(node.Value);
                 }
                 PrintTree(node.Left, level + 1);
