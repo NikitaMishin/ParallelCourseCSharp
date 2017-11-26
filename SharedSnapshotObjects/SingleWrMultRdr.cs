@@ -1,30 +1,74 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml.Schema;
+
 
 namespace AtomicSnapshot
 {
     // bounded version
-    public class SingleWrMultRdr<TV>
+    public class SingleWrMultRdr
     {
         private object _writerLock = new object();
         public readonly int Readers;
-        private Register<TV>[] _registers;
-        
+        private Register[] _registers;
+        private bool[,] _q;
+
         public SingleWrMultRdr(int readers = 4)
         {
             Readers = readers;
-            //_registers = Enumerable.Repeat(default(TV), Readers).ToArray();//stored default values
+            _registers = new Register[Readers];
+            _q = new bool[Readers, Readers];
+            for (var i = 0; i < Readers; i++)
+            {
+                for (int j = 0; j < Readers; j++)
+                {
+                    _q[i, j] = default(bool);
+                }
+            }
+
+            for (var i = 0; i < Readers; i++)
+                _registers[i] = new Register(size: Readers);
         }
-        
-        public TV Scan()
+
+        public int[] ScanI(int registerIndex)
         {
-            throw  new NotImplementedException();
+            var i = registerIndex;
+            var moved = Enumerable.Repeat(default(bool), Readers);
+            while (true)
+            {
+                for (int j = 0; j < Readers; j++)
+                    _q[i, j] = _registers[i].P[j]; //sure??
+                var a = Collect();
+                var b = Collect();
+                //TODO 
+                throw new NotImplementedException();
+            }
         }
-        public void Update(int registerIndex, TV value)
+
+        public void UpdateI(int registerIndex, int value)
         {
-            throw  new NotImplementedException();
+            var i = registerIndex;
+            var f = new bool[Readers];
+            for (var j = 1; j < Readers; j++)
+            {
+                f[j] = !_q[j, i];
+            }
+            var snapShot = ScanI(i);
+            _registers[i].Value = value;
+            _registers[i].Toogle = !_registers[i].Toogle;
+            _registers[i].P = f;
+            _registers[i].SnapShot = snapShot;
         }
-       
+
+        private Register[] Collect() //aka return copy
+        {
+            var registersCopy = new Register[Readers];
+            for (int i = 0; i < Readers; i++)
+            {
+                registersCopy[i] = _registers[i].Copy();
+            }
+            return registersCopy;
+        }
     }
 }
