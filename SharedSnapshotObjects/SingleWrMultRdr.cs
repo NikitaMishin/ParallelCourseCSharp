@@ -36,7 +36,7 @@ namespace AtomicSnapshot
             while (true)
             {
                 for (var j = 0; j < Readers; j++) //HandShake
-                    _q[i, j] = _registers[i].P[j]; //sure??
+                    _q[i, j] = _registers[j].P[i]; 
                 var a = Collect();
                 var b = Collect();
                 var status = true;

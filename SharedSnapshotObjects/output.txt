@@ -1,0 +1,12 @@
+write 69 in 0 register
+write 61 in 1 register
+read from 1 register on 9 iteration: [69 ,61]
+write 85 in 0 register
+write 27 in 1 register
+write 6 in 0 register
+read from 0 register on 12 iteration: [6 ,27]
+write 52 in 1 register
+write 55 in 0 register
+write 41 in 1 register
+read from 1 register on 15 iteration: [55 ,41]
+
