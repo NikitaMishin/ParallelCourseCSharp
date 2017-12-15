@@ -1,4 +1,8 @@
-﻿using System.Linq;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Runtime.Remoting.Messaging;
 
 
 namespace AtomicSnapshot
@@ -11,6 +15,9 @@ namespace AtomicSnapshot
 
         private readonly Register[] _registers;
         private readonly bool[,] _q;
+        private Stopwatch _timer = new Stopwatch();
+        private Dictionary<TimeSpan, int[]> _loggerReader = new Dictionary<TimeSpan, int[]>(100);
+        private Dictionary<TimeSpan, int[]> _loggerWriter = new Dictionary<TimeSpan, int[]>(100);
 
         public SingleWrMultRdr(int readers = 4)
         {
@@ -24,19 +31,20 @@ namespace AtomicSnapshot
                     _q[i, j] = default(bool);
                 }
             }
+            _timer.Start();
 
             for (var i = 0; i < Readers; i++)
                 _registers[i] = new Register(size: Readers);
         }
 
-        public int[] ScanI(int registerIndex)
+        public int[] ScanI(int registerIndex, bool isFromUpdateI = false)
         {
             var i = registerIndex;
             var moved = Enumerable.Repeat(default(bool), Readers).ToArray();
             while (true)
             {
                 for (var j = 0; j < Readers; j++) //HandShake
-                    _q[i, j] = _registers[j].P[i]; 
+                    _q[i, j] = _registers[j].P[i];
                 var a = Collect();
                 var b = Collect();
                 var status = true;
@@ -48,7 +56,9 @@ namespace AtomicSnapshot
                 }
                 if (status)
                 {
-                    return b.Select((register, i1) => register.Value).ToArray();
+                    var result = b.Select((register, i1) => register.Value).ToArray();
+                    if (isFromUpdateI) _loggerReader[_timer.Elapsed] = result;
+                    return result;
                 }
                 for (var j = 0; j < Readers; j++)
                 {
@@ -71,8 +81,8 @@ namespace AtomicSnapshot
                 f[j] = !_q[j, i];
             }
             var snapShot = ScanI(i);
-            // is there need CMPEXGN?
             _registers[i].Value = value;
+            _loggerWriter[_timer.Elapsed] = snapShot;
             _registers[i].Toogle = !_registers[i].Toogle;
             _registers[i].P = f;
             _registers[i].SnapShot = snapShot;
@@ -86,6 +96,20 @@ namespace AtomicSnapshot
                 registersCopy[i] = _registers[i].Copy();
             }
             return registersCopy;
+        }
+
+        public void Trace()
+        {
+            Console.WriteLine("Trace:\nLogReader");
+            foreach (var elem in _loggerReader)
+            {
+                Console.WriteLine("[{2},{0},{1}]",elem.Value[0],elem.Value[1],elem.Key);
+            }
+            Console.WriteLine("Trace:\nLogWriter");
+            foreach (var elem in _loggerWriter)
+            {
+                Console.WriteLine("[{2},{0},{1}]",elem.Value[0],elem.Value[1],elem.Key);
+            }
         }
     }
 }

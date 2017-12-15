@@ -26,7 +26,7 @@ namespace AtomicSnapshot
                     var count = i;
                     Task.Run(() =>
                     {
-                        var shot = boundedSw.ScanI(id);
+                        var shot = boundedSw.ScanI(id,true);
                         Console.WriteLine("read from {0} register on {1} iteration: [{2} ,{3}]", id, count, shot[0],
                             shot[1]);
                     });
@@ -37,6 +37,9 @@ namespace AtomicSnapshot
                     Task.WaitAll(tasks);
                 }
             }
+            
+         boundedSw.Trace();
         }
+        
     }
 }
